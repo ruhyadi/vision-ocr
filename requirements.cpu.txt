@@ -19,3 +19,7 @@ pillow==10.2.0 # image processing
 
 # hardware acceleration
 onnxruntime==1.14.1 # ONNX runtime
+
+# utils
+pyclipper==1.3.* # polygon clipping
+shapely==2.0.1 # polygon operations

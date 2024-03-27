@@ -12,6 +12,7 @@ import numpy as np
 from src.engine.onnx_engine import OnnxEngine
 from src.schema.ocr_schema import OcrResultSchema
 from src.utils.logger import get_logger
+from src.utils.ocr_utils import get_mini_boxes, unclip
 
 log = get_logger()
 
@@ -31,9 +32,13 @@ class OcrDetOnnxEngine(OnnxEngine):
             [self.metadata[0].output_name], {self.metadata[0].input_name: img}
         )
         self._visualize(results)
-        result = self.postprocess_det(
+        boxes = self.postprocess_det(
             results, img0_h=img0.shape[1], img0_w=img0.shape[0], pad=pad
         )
+        for box in boxes:
+            cv2.polylines(img0, [box.astype(np.int32)], True, (0, 255, 0), 2)
+
+        cv2.imwrite("tmp/det.jpg", img0)
 
         return results
 
@@ -85,7 +90,31 @@ class OcrDetOnnxEngine(OnnxEngine):
         # resize image to original size
         result = cv2.resize(result, (img0_h, img0_w))
 
-        return result
+        # find contours
+        outputs = cv2.findContours(
+            image=result.astype(np.uint8),
+            mode=cv2.RETR_EXTERNAL,
+            method=cv2.CHAIN_APPROX_SIMPLE,
+        )
+        if len(outputs) == 3:
+            _, contours, _ = outputs
+        else:
+            contours, _ = outputs
+        n_contours = len(contours)
+
+        boxes = []
+        for i in range(n_contours):
+            pts, sside = get_mini_boxes(contour=contours[i])
+            if sside < 3:
+                continue
+            box = unclip(pts).reshape(-1, 1, 2)
+            box, sside = get_mini_boxes(contour=box)
+            if sside < 3 + 2:
+                continue
+
+            boxes.append(box)
+
+        return boxes
 
     def _visualize(self, results: List[np.ndarray]) -> None:
         """Visualize detection results."""
