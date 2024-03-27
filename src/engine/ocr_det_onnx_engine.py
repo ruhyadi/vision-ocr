@@ -23,11 +23,9 @@ class OcrDetOnnxEngine(OnnxEngine):
         """Initialize PaddleOCR detection engine with ONNX runtime."""
         super().__init__(engine_path, provider)
 
-    def predict(
-        self, img: np.ndarray, shape: Tuple[int, int] = (640, 640)
-    ) -> OcrResultSchema:
+    def predict(self, img: np.ndarray) -> OcrResultSchema:
         """Detect text from image."""
-        img = self.preprocess_img(img, shape)
+        img, ratio, pad = self.preprocess_img(img)
         results: List[np.ndarray] = self.engine.run(
             [self.metadata[0].output_name], {self.metadata[0].input_name: img}
         )
@@ -35,22 +33,30 @@ class OcrDetOnnxEngine(OnnxEngine):
 
         return results
 
-    def preprocess_img(
-        self, img: np.ndarray, shape: Tuple[int, int] = (640, 640)
-    ) -> np.ndarray:
-        """Preprocess image for detection model."""
-        img = cv2.resize(img, shape)
-        log.warning(f"img shape: {img.shape}")
+    def preprocess_img(self, img: np.ndarray) -> np.ndarray:
+        """Preprocess image for detection model"""
+        src_h, src_w = img.shape[:2]
+        dst_h = 640 * ((src_h // 640) + 1)
+        dst_w = 640 * ((src_w // 640) + 1)
+
+        # resize image with ratio preserved
+        ratio = min(dst_w / src_w, dst_h / src_h)
+        resized_w, resized_h = int(src_w * ratio), int(src_h * ratio)
+        dw, dh = (dst_w - resized_w) / 2, (dst_h - resized_h) / 2
+        img = cv2.resize(img, (resized_w, resized_h))
+
+        # pad image to target size
+        top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+        left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+        img = cv2.copyMakeBorder(
+            img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=114
+        )
+
+        # normalize image
         img = np.transpose(img, (2, 0, 1)) / 255.0  # HWC -> CHW
         img = np.expand_dims(img, axis=0)
 
-        # normalize image
-        img_mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
-        img_std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
-        img -= img_mean
-        img /= img_std
-
-        return img.astype(np.float32)
+        return img.astype(np.float32), ratio, (dw, dh)
 
     def _visualize(self, results: List[np.ndarray]) -> None:
         """Visualize detection results."""
@@ -72,4 +78,4 @@ if __name__ == "__main__":
     img = cv2.imread("tmp/sample001.jpg")
     log.warning(f"img shape: {img.shape}")
     # results = engine.predict(img, shape=(img.shape[1], img.shape[0]))
-    results = engine.predict(img, shape=(640 * 5, 640 * 5))
+    results = engine.predict(img)
