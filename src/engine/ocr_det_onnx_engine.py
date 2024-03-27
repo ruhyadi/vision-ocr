@@ -23,19 +23,24 @@ class OcrDetOnnxEngine(OnnxEngine):
         """Initialize PaddleOCR detection engine with ONNX runtime."""
         super().__init__(engine_path, provider)
 
-    def predict(self, img: np.ndarray) -> OcrResultSchema:
+    def predict(
+        self, img: np.ndarray, shape: Tuple[int, int] = (640, 640)
+    ) -> OcrResultSchema:
         """Detect text from image."""
-        img = self.preprocess_img(img)
-        results = self.engine.run(
+        img = self.preprocess_img(img, shape)
+        results: List[np.ndarray] = self.engine.run(
             [self.metadata[0].output_name], {self.metadata[0].input_name: img}
         )
-        # self._visualize(results)
+        self._visualize(results)
 
         return results
 
-    def preprocess_img(self, img: np.ndarray) -> np.ndarray:
+    def preprocess_img(
+        self, img: np.ndarray, shape: Tuple[int, int] = (640, 640)
+    ) -> np.ndarray:
         """Preprocess image for detection model."""
-        img = cv2.resize(img, (640, 640))
+        img = cv2.resize(img, shape)
+        log.warning(f"img shape: {img.shape}")
         img = np.transpose(img, (2, 0, 1)) / 255.0  # HWC -> CHW
         img = np.expand_dims(img, axis=0)
 
@@ -44,14 +49,15 @@ class OcrDetOnnxEngine(OnnxEngine):
         img_std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
         img -= img_mean
         img /= img_std
-        
+
         return img.astype(np.float32)
 
     def _visualize(self, results: List[np.ndarray]) -> None:
         """Visualize detection results."""
-        result = results[0].squeeze(0).transpose((1, 2, 0)) * 255.0 # CHW -> HWC
+        result = results[0].squeeze(0).transpose((1, 2, 0)) * 255.0  # CHW -> HWC
 
         cv2.imwrite("tmp/det.jpg", result)
+
 
 if __name__ == "__main__":
     """Debugging."""
@@ -63,5 +69,7 @@ if __name__ == "__main__":
     engine.setup()
     log.warning(f"Engine metadata: {engine.metadata}")
 
-    img = cv2.imread("assets/debby.jpg")
-    results = engine.predict(img)
+    img = cv2.imread("tmp/sample001.jpg")
+    log.warning(f"img shape: {img.shape}")
+    # results = engine.predict(img, shape=(img.shape[1], img.shape[0]))
+    results = engine.predict(img, shape=(640 * 5, 640 * 5))
