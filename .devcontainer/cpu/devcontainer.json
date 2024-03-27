@@ -1,0 +1,32 @@
+{
+    "name": "cpu-devel",
+    "privileged": false,
+    "remoteUser": "didi",
+    "build": {
+        "dockerfile": "../../dockerfile.cpu.devel",
+        "args": { "USERNAME": "didi" }
+    },
+    "workspaceFolder": "/home/didi/vision-ocr",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/didi/vision-ocr,type=bind",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker": {}
+    },
+    "runArgs": [
+        "--shm-size=4g"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "eamodio.gitlens",
+                "VisualStudioExptTeam.vscodeintellicode",
+                "redhat.vscode-yaml",
+                "yzhang.markdown-all-in-one",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
+}

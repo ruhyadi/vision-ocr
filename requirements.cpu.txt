@@ -1,0 +1,21 @@
+# usage: pip install -r requirements.txt
+
+# base
+hydra-core==1.3.2 # hydra configuration
+rootutils==1.0.7 # path management
+colorlog==6.7.0 # logging with colors
+tqdm==4.66.0 # progress bar
+
+# api
+fastapi==0.110.0 # API framework
+requests==2.31.0 # HTTP requests
+uvicorn==0.28.0 # ASGI server
+python-multipart==0.0.6 # multipart/form-data support
+pydantic==2.6.3 # data validation
+
+# image processing
+opencv-python-headless==4.8.* # image processing
+pillow==10.2.0 # image processing
+
+# hardware acceleration
+onnxruntime==1.14.1 # ONNX runtime
