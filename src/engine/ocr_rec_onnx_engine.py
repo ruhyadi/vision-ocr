@@ -43,16 +43,15 @@ class OcrRecOnnxEngine(OnnxEngine):
 
     def setup(self) -> None:
         """Setup OCR recognition and orientation cls engines."""
-        super().setup() # setup recognition engine
+        super().setup()  # setup recognition engine
 
-        # # setup orientation classifier engine
-        # self.ori_cls_engine = OcrOriClsOnnxEngine(
-        #     engine_path="tmp/models/ocr_ori_cls.onnx",
-        #     provider=self._provider,
-        #     max_batch_size=self.max_batch_size
-        # )
-        # self.ori_cls_engine.setup()
-        # log.warning(f"Oris metadata: {self.ori_cls_engine.metadata}")
+        # setup orientation classifier engine
+        self.ori_cls_engine = OcrOriClsOnnxEngine(
+            engine_path="tmp/models/ocr_ori_cls.onnx",
+            provider=self._provider,
+            max_batch_size=self.max_batch_size,
+        )
+        self.ori_cls_engine.setup()
 
     def predict(self, img: np.ndarray, boxes: List[np.ndarray]) -> OcrResultSchema:
         """
@@ -67,16 +66,18 @@ class OcrRecOnnxEngine(OnnxEngine):
         """
         t0 = time.time()
         imgs = self.preprocess_imgs(img, boxes, dst_h=self.metadata[0].input_shape[2])
+        
+        # predict orientation
+        oris = self.ori_cls_engine.predict(imgs)
+
+        # postprocess image after orientation
+        imgs = self.postprocess_imgs(imgs, oris)
 
         # iterate per batch
         texts: List[str] = []
         scores: List[float] = []
         for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Recognition"):
             batch_imgs = imgs[i : i + self.max_batch_size]
-            
-            # # orientation classification
-            # oris = self.ori_cls_engine.predict(imgs=batch_imgs)
-            # log.warning(f"Oris: {oris}")
 
             batch_results: List[np.ndarray] = self.engine.run(
                 [self.metadata[0].output_name],
@@ -95,9 +96,10 @@ class OcrRecOnnxEngine(OnnxEngine):
         log.info(f"Recognition time: {(t1 - t0)*1000:.3f}ms")
 
         return OcrResultSchema(
-            texts=texts,
-            scores=scores,
             boxes=[box.flatten().tolist() for box in boxes],
+            texts=texts,
+            oris=oris,
+            scores=scores,
         )
 
     def preprocess_imgs(
@@ -119,6 +121,18 @@ class OcrRecOnnxEngine(OnnxEngine):
             imgs.append(img_crop)  # HWC -> CHW
 
         return imgs
+
+    def postprocess_imgs(self, imgs: List[np.ndarray], oris: List[str]) -> List[np.ndarray]:
+        """Postprocess recognition results."""
+        results = []
+        for img, ori in zip(imgs, oris):
+            if ori == "down":
+                img = img.transpose(1, 2, 0)  # CHW -> HWC
+                img = np.rot90(img, k=2) # rotate 180 degree
+                img = img.transpose(2, 0, 1)  # HWC -> CHW
+            results.append(img)
+
+        return results
 
     def postprocess_results(self, results: List[np.ndarray]) -> List[str]:
         """
@@ -189,13 +203,13 @@ if __name__ == "__main__":
     )
     rec_engine.setup()
 
-    # img = cv2.imread("tmp/sample001.jpg")
-    img = cv2.imread("assets/debby.jpg")
+    img = cv2.imread("tmp/sample001.jpg")
+    # img = cv2.imread("assets/debby.jpg")
     boxes = det_engine.predict(img)
     results = rec_engine.predict(img, boxes)
 
     # draw boxes
-    for text, box in zip(results.texts, results.boxes):
+    for text, box, ori in zip(results.texts, results.boxes, results.oris):
         cv2.polylines(
             img,
             [np.array(box).reshape(-1, 1, 2).astype(np.int32)],
@@ -203,8 +217,9 @@ if __name__ == "__main__":
             (0, 255, 0),
             2,
         )
+        color = (0, 255, 0) if ori == "up" else (255, 0, 0)
         cv2.putText(
-            img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
+            img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2
         )
 
     cv2.imwrite("tmp/ocr_result.jpg", img)

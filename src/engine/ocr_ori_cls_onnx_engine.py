@@ -34,16 +34,18 @@ class OcrOriClsOnnxEngine(OnnxEngine):
 
     def predict(self, imgs: List[np.ndarray]):
         """Predict text orientation from text images."""
-        imgs = self.preprocess_imgs(imgs)
+        # imgs = self.preprocess_imgs(imgs)
         # iterate per batch
         oris: List[str] = []
         for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Orientation"):
             batch_imgs = imgs[i : i + self.max_batch_size]
-            batch_oris: List[np.ndarray] = self.engine.run(
+            # batch_oris has shape (n, 2)
+            batch_oris: np.ndarray = self.engine.run(
                 [self.metadata[0].output_name],
                 {self.metadata[0].input_name: batch_imgs},
-            )
-            oris.extend(batch_oris)
+            )[0]
+            results = self.postprocess_oris(batch_oris)
+            oris.extend(results)
 
         return oris
 
@@ -52,21 +54,26 @@ class OcrOriClsOnnxEngine(OnnxEngine):
         Preprocess images.
         Images should be in form [-1, 3, 48, 192].
         """
-        log.warning(f"Image shape: {imgs[0].shape}")
         resized_imgs = np.zeros((len(imgs), 3, 48, 192), dtype=np.float32)
         for i, img in enumerate(imgs):
-            img = img.transpose(1, 2, 0) # CHW -> HWC
-            log.warning(f"Image shape: {img.shape}")
+            img = img.transpose(1, 2, 0)  # CHW -> HWC
             img = cv2.resize(img, (192, 48))
-            # transpose to [C, H, W] and normalize
-            img = img.transpose(2, 0, 1)
-            log.warning(f"Image shape: {img.shape}")
+            img = img.transpose(2, 0, 1)  # HWC -> CHW
             resized_imgs[i] = img
 
         return resized_imgs
 
-    def postprocess_oris(self, oris: List[np.ndarray]) -> List[str]:
-        """Post-process orientation results."""
+    def postprocess_oris(self, oris: np.ndarray) -> List[str]:
+        """
+        Post-process orientation results.
+
+        Args:
+            oris (np.ndarray): Orientation results in shape (n, 2)
+
+        Returns:
+            List[str]: List of orientation categories
+        """
+
         return [self.categories[np.argmax(ori)] for ori in oris]
 
 
