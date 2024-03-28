@@ -11,7 +11,6 @@ import cv2
 import numpy as np
 
 from src.engine.onnx_engine import OnnxEngine
-from src.schema.ocr_schema import OcrResultSchema
 from src.utils.logger import get_logger
 from src.utils.ocr_utils import get_mini_boxes, unclip
 
@@ -25,22 +24,31 @@ class OcrDetOnnxEngine(OnnxEngine):
         """Initialize PaddleOCR detection engine with ONNX runtime."""
         super().__init__(engine_path, provider)
 
-    def predict(self, img: np.ndarray) -> List[List[int]]:
-        """Detect text from image."""
+    def predict(self, img: np.ndarray) -> List[np.ndarray]:
+        """
+        Detect text from image.
+        
+        Args:
+            img (np.ndarray): Image to detect text from
+
+        Returns:
+            List[np.ndarray]: Detected text boxes in shape (n, 4, 2)
+        """
         t0 = time.time()
-        img0 = img.copy()
+        # img0 = img.copy()
+        img0_w, img0_h = img.shape[:2]
         img, pads = self.preprocess_img(img)
         results: List[np.ndarray] = self.engine.run(
             [self.metadata[0].output_name], {self.metadata[0].input_name: img}
         )
         boxes = self.postprocess_det(
-            results, img0_h=img0.shape[1], img0_w=img0.shape[0], pads=pads
+            results, img0_h=img0_h, img0_w=img0_w, pads=pads
         )
 
         t1 = time.time()
         log.info(f"Detection time: {(t1 - t0)*1000:.3f}ms")
 
-        return [[int(x) for x in box.flatten()] for box in boxes]
+        return boxes
 
     def preprocess_img(
         self, img: np.ndarray
@@ -129,7 +137,7 @@ class OcrDetOnnxEngine(OnnxEngine):
         for box in boxes:
             cv2.polylines(img1, [box.astype(np.int32)], True, (0, 255, 0), 2)
 
-        cv2.imwrite("tmp/det_boxes.jpg", img)
+        cv2.imwrite("tmp/det_boxes.jpg", img1)
 
         return img1
 
@@ -146,4 +154,4 @@ if __name__ == "__main__":
     img = cv2.imread("tmp/sample001.jpg")
     results = engine.predict(img)
 
-    log.warning(f"Results: {results}")
+    # log.warning(f"Results: {results}")
