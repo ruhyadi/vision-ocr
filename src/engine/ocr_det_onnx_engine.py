@@ -4,6 +4,7 @@ import rootutils
 
 ROOT = rootutils.autosetup()
 
+import time
 from typing import List, Tuple
 
 import cv2
@@ -24,20 +25,22 @@ class OcrDetOnnxEngine(OnnxEngine):
         """Initialize PaddleOCR detection engine with ONNX runtime."""
         super().__init__(engine_path, provider)
 
-    def predict(self, img: np.ndarray) -> OcrResultSchema:
+    def predict(self, img: np.ndarray) -> List[List[int]]:
         """Detect text from image."""
+        t0 = time.time()
         img0 = img.copy()
         img, pads = self.preprocess_img(img)
         results: List[np.ndarray] = self.engine.run(
             [self.metadata[0].output_name], {self.metadata[0].input_name: img}
         )
-        self._visualize_contours(results)
         boxes = self.postprocess_det(
             results, img0_h=img0.shape[1], img0_w=img0.shape[0], pads=pads
         )
-        self._visualize_boxes(img0, boxes)
 
-        return results
+        t1 = time.time()
+        log.info(f"Detection time: {(t1 - t0)*1000:.3f}ms")
+
+        return [[int(x) for x in box.flatten()] for box in boxes]
 
     def preprocess_img(
         self, img: np.ndarray
@@ -72,7 +75,7 @@ class OcrDetOnnxEngine(OnnxEngine):
         img0_h: int,
         img0_w: int,
         pads: Tuple[int, int, int, int],
-    ) -> OcrResultSchema:
+    ) -> List[np.ndarray]:
         """Postprocess detection results."""
         # convert batch to single result
         result = results[0].squeeze(0).transpose((1, 2, 0)) * 255.0  # CHW -> HWC
@@ -141,5 +144,6 @@ if __name__ == "__main__":
     engine.setup()
 
     img = cv2.imread("tmp/sample001.jpg")
-    # results = engine.predict(img, shape=(img.shape[1], img.shape[0]))
     results = engine.predict(img)
+
+    log.warning(f"Results: {results}")
