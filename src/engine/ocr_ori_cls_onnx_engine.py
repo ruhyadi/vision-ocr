@@ -1,0 +1,80 @@
+"""OCR text orientation classifier ONNX engine."""
+
+import rootutils
+
+ROOT = rootutils.autosetup()
+
+import time
+from typing import List
+
+import cv2
+import numpy as np
+from tqdm import tqdm
+
+from src.engine.onnx_engine import OnnxEngine
+from src.utils.logger import get_logger
+
+log = get_logger()
+
+
+class OcrOriClsOnnxEngine(OnnxEngine):
+    """OCR text orientation classifier engine with ONNX runtime."""
+
+    def __init__(
+        self,
+        engine_path: str,
+        provider: str = "cpu",
+        max_batch_size: int = 8,
+        categories: List[str] = ["up", "down"],
+    ) -> None:
+        """Initialize OCR text orientation classifier engine."""
+        super().__init__(engine_path, provider)
+        self.max_batch_size = max_batch_size
+        self.categories = categories
+
+    def predict(self, imgs: List[np.ndarray]):
+        """Predict text orientation from text images."""
+        imgs = self.preprocess_imgs(imgs)
+        # iterate per batch
+        oris: List[str] = []
+        for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Orientation"):
+            batch_imgs = imgs[i : i + self.max_batch_size]
+            batch_oris: List[np.ndarray] = self.engine.run(
+                [self.metadata[0].output_name],
+                {self.metadata[0].input_name: batch_imgs},
+            )
+            oris.extend(batch_oris)
+
+        return oris
+
+    def preprocess_imgs(self, imgs: List[np.ndarray]) -> np.ndarray:
+        """
+        Preprocess images.
+        Images should be in form [-1, 3, 48, 192].
+        """
+        log.warning(f"Image shape: {imgs[0].shape}")
+        resized_imgs = np.zeros((len(imgs), 3, 48, 192), dtype=np.float32)
+        for i, img in enumerate(imgs):
+            img = img.transpose(1, 2, 0) # CHW -> HWC
+            log.warning(f"Image shape: {img.shape}")
+            img = cv2.resize(img, (192, 48))
+            # transpose to [C, H, W] and normalize
+            img = img.transpose(2, 0, 1)
+            log.warning(f"Image shape: {img.shape}")
+            resized_imgs[i] = img
+
+        return resized_imgs
+
+    def postprocess_oris(self, oris: List[np.ndarray]) -> List[str]:
+        """Post-process orientation results."""
+        return [self.categories[np.argmax(ori)] for ori in oris]
+
+
+if __name__ == "__main__":
+
+    engine = OcrOriClsOnnxEngine(
+        engine_path="tmp/models/ocr_ori_cls.onnx",
+        provider="cpu",
+    )
+    engine.setup()
+    log.warning(f"Metadata: {engine.metadata}")

@@ -10,10 +10,11 @@ from typing import List
 import numpy as np
 from tqdm import tqdm
 
+from src.engine.ocr_ori_cls_onnx_engine import OcrOriClsOnnxEngine
 from src.engine.onnx_engine import OnnxEngine
+from src.schema.ocr_schema import OcrResultSchema
 from src.utils.logger import get_logger
 from src.utils.ocr_utils import CTCLabelDecode
-from src.schema.ocr_schema import OcrResultSchema
 
 log = get_logger()
 
@@ -25,12 +26,13 @@ class OcrRecOnnxEngine(OnnxEngine):
         self,
         engine_path: str,
         provider: str = "cpu",
-        max_batch_size: int = 2,
+        max_batch_size: int = 8,
         dict_path: str = "assets/en_dict.txt",
     ) -> None:
         """Initialize OCR recognition engine with ONNX runtime."""
         super().__init__(engine_path, provider)
         self.max_batch_size = max_batch_size
+        self._provider = provider
         self.dict_path = dict_path
 
         self.postprocessor = CTCLabelDecode(
@@ -38,6 +40,19 @@ class OcrRecOnnxEngine(OnnxEngine):
             character_type="ch",
             use_space_char=True,
         )
+
+    def setup(self) -> None:
+        """Setup OCR recognition and orientation cls engines."""
+        super().setup() # setup recognition engine
+
+        # # setup orientation classifier engine
+        # self.ori_cls_engine = OcrOriClsOnnxEngine(
+        #     engine_path="tmp/models/ocr_ori_cls.onnx",
+        #     provider=self._provider,
+        #     max_batch_size=self.max_batch_size
+        # )
+        # self.ori_cls_engine.setup()
+        # log.warning(f"Oris metadata: {self.ori_cls_engine.metadata}")
 
     def predict(self, img: np.ndarray, boxes: List[np.ndarray]) -> OcrResultSchema:
         """
@@ -58,6 +73,11 @@ class OcrRecOnnxEngine(OnnxEngine):
         scores: List[float] = []
         for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Recognition"):
             batch_imgs = imgs[i : i + self.max_batch_size]
+            
+            # # orientation classification
+            # oris = self.ori_cls_engine.predict(imgs=batch_imgs)
+            # log.warning(f"Oris: {oris}")
+
             batch_results: List[np.ndarray] = self.engine.run(
                 [self.metadata[0].output_name],
                 {self.metadata[0].input_name: batch_imgs},
@@ -82,9 +102,9 @@ class OcrRecOnnxEngine(OnnxEngine):
 
     def preprocess_imgs(
         self, img: np.ndarray, boxes: List[np.ndarray], dst_h: int = 48
-    ) -> np.ndarray:
+    ) -> List[np.ndarray]:
         """Preprocess image for recognition model."""
-        imgs = []
+        imgs: List[np.ndarray] = []
         for box in boxes:
             # crop with rotated box
             img_crop = self.rotated_crop(img, points=box)
@@ -149,16 +169,6 @@ class OcrRecOnnxEngine(OnnxEngine):
 
         return dst_image
 
-    def _visualize_boxes(self, img: np.ndarray, boxes: List[np.ndarray]) -> None:
-        """Visualize boxes."""
-        img1 = img.copy()
-        for box in boxes:
-            cv2.polylines(img1, [box.astype(np.int32)], True, (0, 255, 0), 2)
-
-        cv2.imwrite("tmp/det_boxes.jpg", img)
-
-        return img1
-
 
 if __name__ == "__main__":
     """Debugging."""
@@ -179,14 +189,22 @@ if __name__ == "__main__":
     )
     rec_engine.setup()
 
-    img = cv2.imread("tmp/sample001.jpg")
-    # img = cv2.imread("assets/debby.jpg")
+    # img = cv2.imread("tmp/sample001.jpg")
+    img = cv2.imread("assets/debby.jpg")
     boxes = det_engine.predict(img)
     results = rec_engine.predict(img, boxes)
 
     # draw boxes
     for text, box in zip(results.texts, results.boxes):
-        cv2.polylines(img, [np.array(box).reshape(-1, 1, 2).astype(np.int32)], True, (0, 255, 0), 2)
-        cv2.putText(img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.polylines(
+            img,
+            [np.array(box).reshape(-1, 1, 2).astype(np.int32)],
+            True,
+            (0, 255, 0),
+            2,
+        )
+        cv2.putText(
+            img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
+        )
 
     cv2.imwrite("tmp/ocr_result.jpg", img)
