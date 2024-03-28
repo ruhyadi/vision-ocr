@@ -12,6 +12,8 @@ from tqdm import tqdm
 
 from src.engine.onnx_engine import OnnxEngine
 from src.utils.logger import get_logger
+from src.utils.ocr_utils import CTCLabelDecode
+from src.schema.ocr_schema import OcrResultSchema
 
 log = get_logger()
 
@@ -20,13 +22,24 @@ class OcrRecOnnxEngine(OnnxEngine):
     """OCR recognition engine with ONNX runtime."""
 
     def __init__(
-        self, engine_path: str, provider: str = "cpu", max_batch_size: int = 8
+        self,
+        engine_path: str,
+        provider: str = "cpu",
+        max_batch_size: int = 2,
+        dict_path: str = "assets/en_dict.txt",
     ) -> None:
         """Initialize OCR recognition engine with ONNX runtime."""
         super().__init__(engine_path, provider)
         self.max_batch_size = max_batch_size
+        self.dict_path = dict_path
 
-    def predict(self, img: np.ndarray, boxes: List[np.ndarray]):
+        self.postprocessor = CTCLabelDecode(
+            character_dict_path=self.dict_path,
+            character_type="ch",
+            use_space_char=True,
+        )
+
+    def predict(self, img: np.ndarray, boxes: List[np.ndarray]) -> OcrResultSchema:
         """
         Predict transcription from text images.
 
@@ -38,22 +51,34 @@ class OcrRecOnnxEngine(OnnxEngine):
             List[np.ndarray]: Predicted transcriptions
         """
         t0 = time.time()
-        imgs = self.preprocess_imgs(img, boxes)
+        imgs = self.preprocess_imgs(img, boxes, dst_h=self.metadata[0].input_shape[2])
 
         # iterate per batch
-        results = []
+        texts: List[str] = []
+        scores: List[float] = []
         for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Recognition"):
             batch_imgs = imgs[i : i + self.max_batch_size]
             batch_results: List[np.ndarray] = self.engine.run(
                 [self.metadata[0].output_name],
                 {self.metadata[0].input_name: batch_imgs},
             )
-            results.extend(batch_results)
+            for res in batch_results:
+                post_res = self.postprocessor(res)
+                if post_res:
+                    texts.append(post_res[0][0])
+                    scores.append(float(post_res[0][1]))
+                else:
+                    texts.append("")
+                    scores.append(0.0)
 
         t1 = time.time()
         log.info(f"Recognition time: {(t1 - t0)*1000:.3f}ms")
 
-        return results
+        return OcrResultSchema(
+            texts=texts,
+            scores=scores,
+            boxes=[box.flatten().tolist() for box in boxes],
+        )
 
     def preprocess_imgs(
         self, img: np.ndarray, boxes: List[np.ndarray], dst_h: int = 48
@@ -66,9 +91,24 @@ class OcrRecOnnxEngine(OnnxEngine):
             # resize
             dst_w = int(dst_h * img_crop.shape[1] / img_crop.shape[0])
             img_crop = cv2.resize(img_crop, (dst_w, dst_h))
-            imgs.append(img_crop.transpose(2, 0, 1))  # HWC -> CHW
+            # normalize
+            img_crop = img_crop.astype(np.float32) / 255.0
+            img_crop -= 0.5
+            img_crop /= 0.5
+            img_crop = img_crop.transpose(2, 0, 1)  # HWC -> CHW
+            imgs.append(img_crop)  # HWC -> CHW
 
         return imgs
+
+    def postprocess_results(self, results: List[np.ndarray]) -> List[str]:
+        """
+        Batched postprocess recognition results.
+        WARNING: not used yet.
+        """
+        results = np.array(results).squeeze(0)
+        results = self.postprocessor(results)
+
+        return results
 
     def rotated_crop(self, img: np.ndarray, points: np.ndarray) -> np.ndarray:
         """Crop image with rotated box (points)."""
@@ -138,8 +178,15 @@ if __name__ == "__main__":
         max_batch_size=1,
     )
     rec_engine.setup()
-    log.warning(f"Recognition metadata: {rec_engine.metadata}")
 
     img = cv2.imread("tmp/sample001.jpg")
+    # img = cv2.imread("assets/debby.jpg")
     boxes = det_engine.predict(img)
     results = rec_engine.predict(img, boxes)
+
+    # draw boxes
+    for text, box in zip(results.texts, results.boxes):
+        cv2.polylines(img, [np.array(box).reshape(-1, 1, 2).astype(np.int32)], True, (0, 255, 0), 2)
+        cv2.putText(img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    cv2.imwrite("tmp/ocr_result.jpg", img)
