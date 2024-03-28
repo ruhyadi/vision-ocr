@@ -4,9 +4,11 @@ import rootutils
 
 ROOT = rootutils.autosetup()
 
+import time
 from typing import List
 
 import numpy as np
+from tqdm import tqdm
 
 from src.engine.onnx_engine import OnnxEngine
 from src.utils.logger import get_logger
@@ -35,28 +37,36 @@ class OcrRecOnnxEngine(OnnxEngine):
         Returns:
             List[np.ndarray]: Predicted transcriptions
         """
+        t0 = time.time()
         imgs = self.preprocess_imgs(img, boxes)
 
-        # # iterate per batch
-        # results = []
-        # for i in range(0, len(imgs), self.max_batch_size):
-        #     batch_imgs = imgs[i : i + self.max_batch_size]
-        #     batch_results: List[np.ndarray] = self.engine.run(
-        #         [self.metadata[0].output_name],
-        #         {self.metadata[0].input_name: batch_imgs},
-        #     )
-        #     log.warning(f"Batch {i} results: {batch_results}")
-        #     results.extend(batch_results)
+        # iterate per batch
+        results = []
+        for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Recognition"):
+            batch_imgs = imgs[i : i + self.max_batch_size]
+            batch_results: List[np.ndarray] = self.engine.run(
+                [self.metadata[0].output_name],
+                {self.metadata[0].input_name: batch_imgs},
+            )
+            results.extend(batch_results)
 
-        # return results
+        t1 = time.time()
+        log.info(f"Recognition time: {(t1 - t0)*1000:.3f}ms")
 
-    def preprocess_imgs(self, img: np.ndarray, boxes: List[np.ndarray]) -> np.ndarray:
+        return results
+
+    def preprocess_imgs(
+        self, img: np.ndarray, boxes: List[np.ndarray], dst_h: int = 48
+    ) -> np.ndarray:
         """Preprocess image for recognition model."""
         imgs = []
-        for i, box in enumerate(boxes):
+        for box in boxes:
+            # crop with rotated box
             img_crop = self.rotated_crop(img, points=box)
-            imgs.append(img_crop)
-            cv2.imwrite(f"tmp/cropped/{i}.jpg", img_crop)
+            # resize
+            dst_w = int(dst_h * img_crop.shape[1] / img_crop.shape[0])
+            img_crop = cv2.resize(img_crop, (dst_w, dst_h))
+            imgs.append(img_crop.transpose(2, 0, 1))  # HWC -> CHW
 
         return imgs
 
