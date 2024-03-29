@@ -27,7 +27,7 @@ class OcrDetOnnxEngine(OnnxEngine):
     def predict(self, img: np.ndarray) -> List[np.ndarray]:
         """
         Detect text from image.
-        
+
         Args:
             img (np.ndarray): Image to detect text from
 
@@ -41,9 +41,7 @@ class OcrDetOnnxEngine(OnnxEngine):
         results: List[np.ndarray] = self.engine.run(
             [self.metadata[0].output_name], {self.metadata[0].input_name: img}
         )
-        boxes = self.postprocess_det(
-            results, img0_h=img0_h, img0_w=img0_w, pads=pads
-        )
+        boxes = self.postprocess_det(results, img0_h=img0_h, img0_w=img0_w, pads=pads)
 
         t1 = time.time()
         log.info(f"Detection time: {(t1 - t0)*1000:.3f}ms")
@@ -140,18 +138,3 @@ class OcrDetOnnxEngine(OnnxEngine):
         cv2.imwrite("tmp/det_boxes.jpg", img1)
 
         return img1
-
-
-if __name__ == "__main__":
-    """Debugging."""
-
-    engine = OcrDetOnnxEngine(
-        engine_path="tmp/models/ocr_det.onnx",
-        provider="cpu",
-    )
-    engine.setup()
-
-    img = cv2.imread("tmp/sample001.jpg")
-    results = engine.predict(img)
-
-    # log.warning(f"Results: {results}")
