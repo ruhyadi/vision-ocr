@@ -1,0 +1,18 @@
+# API configs
+
+# server configs
+host: 0.0.0.0 # host
+port: ${oc.env:API_PORT} # port. define in .env file
+workers: 1 # number of workers
+timeout: 60 # seconds
+
+# CORS configurations
+middleware:
+  cors:
+    allow_origins: # allowed origins
+      - "*"
+    allow_methods: # allowed methods
+      - "*"
+    allow_headers: # allowed headers
+      - "*"
+    allow_credentials: true # allow credentials

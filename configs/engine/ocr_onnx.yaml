@@ -1,0 +1,8 @@
+# OCR onnx engine
+
+ocr:
+  det_engine_path: tmp/models/ocr_det.onnx
+  rec_engine_path: tmp/models/ocr_rec.onnx
+  ori_engine_path: tmp/models/ocr_ori.onnx
+  provider: cpu
+  max_batch_size: 1
