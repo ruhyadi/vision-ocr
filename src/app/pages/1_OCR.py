@@ -7,10 +7,12 @@ ROOT = rootutils.autosetup()
 import time
 from io import BytesIO
 
+import os
 import numpy as np
 import requests
 import streamlit as st
 from PIL import Image
+from dotenv import load_dotenv
 
 from src.schema.ocr_schema import OcrResultSchema
 from src.utils.logger import get_logger
@@ -18,7 +20,10 @@ from src.utils.plot_utils import draw_ocr, draw_ocr_comparisson, generate_st_tab
 
 log = get_logger()
 
-BASE_URL = "http://localhost:4700"
+load_dotenv()
+
+API_PORT = os.getenv("API_PORT")
+BASE_URL = f"http://localhost:{API_PORT}"
 
 
 def page():

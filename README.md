@@ -1,5 +1,7 @@
 # Vision OCR
 
+![dashboard](./assets/dashboard.png)
+
 ## Introduction
 Vision OCR is an optical character recognition tool that uses the [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) model to extract text from image. At this moment, we only support [ONNX Runtime](https://onnxruntime.ai/) as the backend for PaddleOCR model.
 
