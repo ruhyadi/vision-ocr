@@ -17,7 +17,7 @@ from src.utils.logger import get_logger
 log = get_logger()
 
 
-class OcrOriClsOnnxEngine(OnnxEngine):
+class OcrOriOnnxEngine(OnnxEngine):
     """OCR text orientation classifier engine with ONNX runtime."""
 
     def __init__(
@@ -34,7 +34,6 @@ class OcrOriClsOnnxEngine(OnnxEngine):
 
     def predict(self, imgs: List[np.ndarray]):
         """Predict text orientation from text images."""
-        # imgs = self.preprocess_imgs(imgs)
         # iterate per batch
         oris: List[str] = []
         for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Orientation"):
@@ -79,7 +78,7 @@ class OcrOriClsOnnxEngine(OnnxEngine):
 
 if __name__ == "__main__":
 
-    engine = OcrOriClsOnnxEngine(
+    engine = OcrOriOnnxEngine(
         engine_path="tmp/models/ocr_ori_cls.onnx",
         provider="cpu",
     )

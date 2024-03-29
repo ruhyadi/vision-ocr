@@ -9,8 +9,9 @@ from typing import List
 
 import numpy as np
 from tqdm import tqdm
+import cv2
 
-from src.engine.ocr_ori_cls_onnx_engine import OcrOriClsOnnxEngine
+from src.engine.ocr_ori_onnx_engine import OcrOriOnnxEngine
 from src.engine.onnx_engine import OnnxEngine
 from src.schema.ocr_schema import OcrResultSchema
 from src.utils.logger import get_logger
@@ -24,13 +25,15 @@ class OcrRecOnnxEngine(OnnxEngine):
 
     def __init__(
         self,
-        engine_path: str,
+        rec_engine_path: str,
+        ori_engine_path: str,
         provider: str = "cpu",
         max_batch_size: int = 8,
         dict_path: str = "assets/en_dict.txt",
     ) -> None:
         """Initialize OCR recognition engine with ONNX runtime."""
-        super().__init__(engine_path, provider)
+        super().__init__(rec_engine_path, provider)
+        self.ori_engine_path = ori_engine_path
         self.max_batch_size = max_batch_size
         self._provider = provider
         self.dict_path = dict_path
@@ -46,8 +49,8 @@ class OcrRecOnnxEngine(OnnxEngine):
         super().setup()  # setup recognition engine
 
         # setup orientation classifier engine
-        self.ori_cls_engine = OcrOriClsOnnxEngine(
-            engine_path="tmp/models/ocr_ori_cls.onnx",
+        self.ori_cls_engine = OcrOriOnnxEngine(
+            engine_path=self.ori_engine_path,
             provider=self._provider,
             max_batch_size=self.max_batch_size,
         )
@@ -66,19 +69,18 @@ class OcrRecOnnxEngine(OnnxEngine):
         """
         t0 = time.time()
         imgs = self.preprocess_imgs(img, boxes, dst_h=self.metadata[0].input_shape[2])
-        
+
         # predict orientation
         oris = self.ori_cls_engine.predict(imgs)
 
         # postprocess image after orientation
-        imgs = self.postprocess_imgs(imgs, oris)
+        imgs = self.postprocess_ori_imgs(imgs, oris)
 
         # iterate per batch
         texts: List[str] = []
         scores: List[float] = []
         for i in tqdm(range(0, len(imgs), self.max_batch_size), desc="Recognition"):
             batch_imgs = imgs[i : i + self.max_batch_size]
-
             batch_results: List[np.ndarray] = self.engine.run(
                 [self.metadata[0].output_name],
                 {self.metadata[0].input_name: batch_imgs},
@@ -87,7 +89,7 @@ class OcrRecOnnxEngine(OnnxEngine):
                 post_res = self.postprocessor(res)
                 if post_res:
                     texts.append(post_res[0][0])
-                    scores.append(float(post_res[0][1]))
+                    scores.append(round(float(post_res[0][1]), 2))
                 else:
                     texts.append("")
                     scores.append(0.0)
@@ -122,13 +124,15 @@ class OcrRecOnnxEngine(OnnxEngine):
 
         return imgs
 
-    def postprocess_imgs(self, imgs: List[np.ndarray], oris: List[str]) -> List[np.ndarray]:
+    def postprocess_ori_imgs(
+        self, imgs: List[np.ndarray], oris: List[str]
+    ) -> List[np.ndarray]:
         """Postprocess recognition results."""
         results = []
         for img, ori in zip(imgs, oris):
             if ori == "down":
                 img = img.transpose(1, 2, 0)  # CHW -> HWC
-                img = np.rot90(img, k=2) # rotate 180 degree
+                img = np.rot90(img, k=2)  # rotate 180 degree
                 img = img.transpose(2, 0, 1)  # HWC -> CHW
             results.append(img)
 
@@ -197,7 +201,7 @@ if __name__ == "__main__":
     det_engine.setup()
 
     rec_engine = OcrRecOnnxEngine(
-        engine_path="tmp/models/ocr_rec.onnx",
+        rec_engine_path="tmp/models/ocr_rec.onnx",
         provider="cpu",
         max_batch_size=1,
     )
