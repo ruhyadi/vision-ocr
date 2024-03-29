@@ -6,12 +6,14 @@ ROOT = rootutils.autosetup()
 
 from io import BytesIO
 
+import numpy as np
 import requests
 import streamlit as st
 from PIL import Image
 
 from src.schema.ocr_schema import OcrResultSchema
 from src.utils.logger import get_logger
+from src.utils.plot_utils import draw_ocr, draw_ocr_comparisson, generate_st_table
 
 log = get_logger()
 
@@ -33,10 +35,31 @@ def page():
     submit_btn = st.button("Submit")
 
     if submit_btn and img_uploaded:
-        st.image(img_uploaded, caption="Uploaded Image", use_column_width=True)
-        st.write("Processing...")
-        ocr_result = post_image(Image.open(img_uploaded))
-        st.write(ocr_result)
+        with st.spinner("Processing..."):
+            img_pil = Image.open(img_uploaded)
+            ocr_result = post_image(img_pil)
+            ocr_result_img = draw_ocr_comparisson(
+                np.array(img_pil),
+                ocr_result.boxes,
+                ocr_result.texts,
+                ocr_result.oris,
+            )
+        st.success("Success generating OCR result")
+        st.warning(
+            f"Image quality reduced. Please download the image to view the result."
+        )
+        st.download_button(
+            label="Download OCR Result",
+            data=np_to_bytes_pil(ocr_result_img),
+            file_name="ocr_result.jpg",
+            mime="image/jpeg",
+        )
+        st.image(ocr_result_img, caption="OCR Result", use_column_width=True)
+
+        with st.spinner("Generating table..."):
+            st.subheader("OCR Result Table")
+            df = generate_st_table(img=np.array(img_pil), boxes=ocr_result.boxes, texts=ocr_result.texts, oris=ocr_result.oris)
+            st.write(df.to_html(escape=False), unsafe_allow_html=True)
 
 
 def post_image(img: Image) -> OcrResultSchema:
@@ -53,6 +76,16 @@ def post_image(img: Image) -> OcrResultSchema:
     res.raise_for_status()
 
     return OcrResultSchema(**res.json())
+
+
+def np_to_bytes_pil(img: np.ndarray) -> bytes:
+    """Convert numpy array to PIL Image."""
+    img_pil = Image.fromarray(img)
+    img_bytes = BytesIO()
+    img_pil.save(img_bytes, format="JPEG")
+    img_bytes.seek(0)
+
+    return img_bytes
 
 
 if __name__ == "__main__":
