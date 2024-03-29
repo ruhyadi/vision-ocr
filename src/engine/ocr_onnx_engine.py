@@ -4,9 +4,8 @@ import rootutils
 
 ROOT = rootutils.autosetup()
 
-from typing import Tuple
+import time
 
-import cv2
 import numpy as np
 
 from src.engine.ocr_det_onnx_engine import OcrDetOnnxEngine
@@ -37,6 +36,7 @@ class OcrOnnxEngine:
 
     def setup(self) -> None:
         """Setup OCR engines."""
+        log.info(f"Setup OCR engines with provider {self.provider}")
         self.det_engine = OcrDetOnnxEngine(
             engine_path=self.det_engine_path, provider=self.provider
         )
@@ -50,42 +50,20 @@ class OcrOnnxEngine:
         )
         self.rec_engine.setup()
 
+        log.info("OCR engines are ready")
+
     def predict(self, img: np.ndarray) -> OcrResultSchema:
         """Predict OCR from image."""
+        log.info(f"Predict OCR from image with shape {img.shape[:2]}")
+        t0 = time.time()
+
         # detect text boxes
         boxes = self.det_engine.predict(img)
 
         # recognize text
         result = self.rec_engine.predict(img, boxes)
 
+        t1 = time.time()
+        log.info(f"OCR prediction time: {(t1 - t0)*1000:.3f}ms")
+
         return result
-
-if __name__ == "__main__":
-    """Debugging."""
-    engine = OcrOnnxEngine(
-        det_engine_path="tmp/models/ocr_det.onnx",
-        rec_engine_path="tmp/models/ocr_rec.onnx",
-        ori_engine_path="tmp/models/ocr_ori.onnx",
-        provider="cpu",
-        max_batch_size=1,
-    )
-    engine.setup()
-
-    img = cv2.imread("tmp/sample001.jpg")
-    results = engine.predict(img)
-
-    # draw boxes
-    for text, box, ori in zip(results.texts, results.boxes, results.oris):
-        cv2.polylines(
-            img,
-            [np.array(box).reshape(-1, 1, 2).astype(np.int32)],
-            True,
-            (0, 255, 0),
-            2,
-        )
-        color = (0, 255, 0) if ori == "up" else (255, 0, 0)
-        cv2.putText(
-            img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2
-        )
-
-    cv2.imwrite("tmp/ocr_result.jpg", img)

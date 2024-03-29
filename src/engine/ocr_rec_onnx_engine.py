@@ -7,9 +7,9 @@ ROOT = rootutils.autosetup()
 import time
 from typing import List
 
+import cv2
 import numpy as np
 from tqdm import tqdm
-import cv2
 
 from src.engine.ocr_ori_onnx_engine import OcrOriOnnxEngine
 from src.engine.onnx_engine import OnnxEngine
@@ -72,8 +72,6 @@ class OcrRecOnnxEngine(OnnxEngine):
 
         # predict orientation
         oris = self.ori_cls_engine.predict(imgs)
-
-        # postprocess image after orientation
         imgs = self.postprocess_ori_imgs(imgs, oris)
 
         # iterate per batch
@@ -138,16 +136,6 @@ class OcrRecOnnxEngine(OnnxEngine):
 
         return results
 
-    def postprocess_results(self, results: List[np.ndarray]) -> List[str]:
-        """
-        Batched postprocess recognition results.
-        WARNING: not used yet.
-        """
-        results = np.array(results).squeeze(0)
-        results = self.postprocessor(results)
-
-        return results
-
     def rotated_crop(self, img: np.ndarray, points: np.ndarray) -> np.ndarray:
         """Crop image with rotated box (points)."""
         assert len(points) == 4, "Rotated box must have 4 points"
@@ -186,44 +174,3 @@ class OcrRecOnnxEngine(OnnxEngine):
             dst_image = np.rot90(dst_image)
 
         return dst_image
-
-
-if __name__ == "__main__":
-    """Debugging."""
-    import cv2
-
-    from src.engine.ocr_det_onnx_engine import OcrDetOnnxEngine
-
-    det_engine = OcrDetOnnxEngine(
-        engine_path="tmp/models/ocr_det.onnx",
-        provider="cpu",
-    )
-    det_engine.setup()
-
-    rec_engine = OcrRecOnnxEngine(
-        rec_engine_path="tmp/models/ocr_rec.onnx",
-        provider="cpu",
-        max_batch_size=1,
-    )
-    rec_engine.setup()
-
-    img = cv2.imread("tmp/sample001.jpg")
-    # img = cv2.imread("assets/debby.jpg")
-    boxes = det_engine.predict(img)
-    results = rec_engine.predict(img, boxes)
-
-    # draw boxes
-    for text, box, ori in zip(results.texts, results.boxes, results.oris):
-        cv2.polylines(
-            img,
-            [np.array(box).reshape(-1, 1, 2).astype(np.int32)],
-            True,
-            (0, 255, 0),
-            2,
-        )
-        color = (0, 255, 0) if ori == "up" else (255, 0, 0)
-        cv2.putText(
-            img, text, (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2
-        )
-
-    cv2.imwrite("tmp/ocr_result.jpg", img)
