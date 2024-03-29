@@ -1,3 +1,4 @@
+# usage: docker build -f dockerfile.cpu.devel -t ruhyadi/vision-ocr:devel .
 FROM python:3.10-slim
 
 ARG USERNAME=didi
@@ -20,12 +21,17 @@ RUN DEBIAN_FRONTEND=noninteractive \
 
 # install python dependencies
 COPY ./requirements.cpu.txt /tmp/requirements.txt
+COPY ./requirements.app.txt /tmp/requirements.app.txt
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install -r /tmp/requirements.txt
+    pip install -r /tmp/requirements.txt && \
+    pip install -r /tmp/requirements.app.txt
 RUN rm /tmp/requirements.txt
 
 # default user
 USER $USERNAME
+
+# workspace
+WORKDIR /app
 
 # entrypoint
 CMD ["bash"]

@@ -23,7 +23,8 @@ log = get_logger()
 load_dotenv()
 
 API_PORT = os.getenv("API_PORT")
-BASE_URL = f"http://localhost:{API_PORT}"
+API_HOST = os.getenv("API_HOST")
+BASE_URL = f"http://{API_HOST}:{API_PORT}"
 
 
 def page():

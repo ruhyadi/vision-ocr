@@ -1,0 +1,33 @@
+version: "3"
+
+services:
+  vision-ocr-api:
+    container_name: vision-ocr-api
+    image: ruhyadi/vision-ocr:devel
+    restart: always
+    env_file: .env
+    ports:
+      - ${API_PORT}:${API_PORT}
+    volumes:
+      - ./:/app
+    command: python src/main.py
+    networks:
+      - vision-ocr-network
+
+  vision-ocr-app:
+    container_name: vision-ocr-app
+    image: ruhyadi/vision-ocr:devel
+    restart: always
+    env_file: .env
+    ports:
+      - ${APP_PORT}:${APP_PORT}
+    volumes:
+      - ./:/app
+    command: streamlit run src/app/Home.py --server.port=${APP_PORT} --server.address=0.0.0.0
+    networks:
+      - vision-ocr-network
+
+networks:
+  vision-ocr-network:
+    driver: bridge
+
