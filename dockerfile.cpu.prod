@@ -1,0 +1,23 @@
+# usage: docker build -f dockerfile.cpu.prod -t ruhyadi/vision-ocr:v1.0.0-api .
+FROM python:3.10-slim
+
+# install dependencies
+RUN DEBIAN_FRONTEND=noninteractive \
+    apt-get update && apt-get install -y --no-install-recommends \
+    curl wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# install python dependencies
+COPY ./requirements.cpu.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install -r /tmp/requirements.txt
+RUN rm /tmp/requirements.txt
+
+# working directory
+WORKDIR /app
+
+# copy file
+COPY . .
+
+# entrypoint
+CMD ["bash"]

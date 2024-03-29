@@ -37,22 +37,25 @@ docker pull ruhyadi/vision-ocr:v1.0.0-api
 docker pull ruhyadi/vision-ocr:v1.0.0-app
 ```
 
-After that, you can run the docker container by:
+For simplicity, we will use the `--network host` option to run the docker container. Please allocate port `4700` for the API and port `4701` for the dashboard. You can run the docker container by:
 ```bash
 # run the api image
 docker run \
     -d \
-    -p 4700:4700 \
-    --name vision-ocr \
-    ruhyadi/vision-ocr:v1.0.0 \
+    --rm \
+    --name vision-ocr-api \
+    --network host \
+    ruhyadi/vision-ocr:v1.0.0-api \
     python src/main.py
 
 # run the app image
 docker run \
     -d \
-    -p 4701:4701 \
-    --name vision-ocr \
-    ruhyadi/vision-ocr:v1.0.0-app
+    --rm \
+    --name vision-ocr-app \
+    --network host \
+    ruhyadi/vision-ocr:v1.0.0-app \
+    streamlit run src/app/Home.py --server.port=4701 --server.address=0.0.0.0 
 ```
 
 You can open the dashboard by open your browser and go to `http://localhost:4701`, or you can open the API swagger documentation by open your browser and go to `http://localhost:4700`.
