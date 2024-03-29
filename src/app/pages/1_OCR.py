@@ -44,6 +44,7 @@ def page():
     if submit_btn and img_uploaded:
         with st.spinner("Processing..."):
             img_pil = Image.open(img_uploaded)
+            img_pil = img_pil.convert("RGB")
 
             # predict OCR
             t0 = time.time()
