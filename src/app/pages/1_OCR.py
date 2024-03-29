@@ -4,6 +4,7 @@ import rootutils
 
 ROOT = rootutils.autosetup()
 
+import time
 from io import BytesIO
 
 import numpy as np
@@ -37,19 +38,25 @@ def page():
     if submit_btn and img_uploaded:
         with st.spinner("Processing..."):
             img_pil = Image.open(img_uploaded)
+
+            # predict OCR
+            t0 = time.time()
             ocr_result = post_image(img_pil)
+            t_ms = (time.time() - t0) * 1000
+
             ocr_result_img = draw_ocr_comparisson(
                 np.array(img_pil),
                 ocr_result.boxes,
                 ocr_result.texts,
                 ocr_result.oris,
             )
-        st.success("Success generating OCR result")
+            
+        st.success(f"Success generating OCR result in {t_ms:.2f} ms")
         st.warning(
             f"Image quality reduced. Please download the image to view the result."
         )
         st.download_button(
-            label="Download OCR Result",
+            label="Download Full Resolution OCR Result",
             data=np_to_bytes_pil(ocr_result_img),
             file_name="ocr_result.jpg",
             mime="image/jpeg",
@@ -58,7 +65,12 @@ def page():
 
         with st.spinner("Generating table..."):
             st.subheader("OCR Result Table")
-            df = generate_st_table(img=np.array(img_pil), boxes=ocr_result.boxes, texts=ocr_result.texts, oris=ocr_result.oris)
+            df = generate_st_table(
+                img=np.array(img_pil),
+                boxes=ocr_result.boxes,
+                texts=ocr_result.texts,
+                oris=ocr_result.oris,
+            )
             st.write(df.to_html(escape=False), unsafe_allow_html=True)
 
 
