@@ -28,7 +28,7 @@ class UvicornServer:
         uvicorn.run(
             self.app,
             host=self.host,
-            port=self.port,
+            port=int(self.port),
             workers=self.workers,
             log_level=self.log_level,
         )

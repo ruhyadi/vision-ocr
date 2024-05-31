@@ -4,6 +4,9 @@ services:
   vision-ocr-api:
     container_name: vision-ocr-api
     image: ruhyadi/vision-ocr:devel
+    build:
+      context: .
+      dockerfile: dockerfile.cpu.devel
     restart: always
     env_file: .env
     ports:
@@ -17,6 +20,9 @@ services:
   vision-ocr-app:
     container_name: vision-ocr-app
     image: ruhyadi/vision-ocr:devel
+    build:
+      context: .
+      dockerfile: dockerfile.cpu.devel
     restart: always
     env_file: .env
     ports:
